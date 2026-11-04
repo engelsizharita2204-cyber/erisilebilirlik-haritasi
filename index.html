@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Erciş Erişilebilirlik Haritası</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#10302f;--paper:#f6f8f7;--card:#fff;--line:#cfdad7;--accent:#e8a317;--live:#00e5c0;--ok:#1f9d55;--part:#e8a317;--bad:#d64545;--blk:#7a4fd6;--wait:#6b7b80;--shadow:0 4px 18px rgba(16,48,47,.22)}
+@media(prefers-color-scheme:dark){:root{--ink:#e6f1ef;--paper:#0f1d1d;--card:#182929;--line:#2c4444;--shadow:0 4px 18px rgba(0,0,0,.5)}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;font-family:'Atkinson Hyperlegible',system-ui,sans-serif;color:var(--ink);background:var(--paper)}
+#app{position:fixed;inset:0;display:flex;flex-direction:column}
+header{padding:calc(env(safe-area-inset-top,0px) + 8px) 14px 8px;background:var(--card);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;z-index:1000}
+header h1{font-size:16px;margin:0;flex:1;line-height:1.2}
+header small{display:block;font-weight:400;opacity:.7;font-size:12px}
+#map{flex:1;z-index:1}
+button,.btn{font:inherit;cursor:pointer;border:0;border-radius:12px;padding:12px 14px;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.primary{background:var(--ink);color:var(--paper)}
+.ghost{background:var(--card);color:var(--ink);border:1.5px solid var(--line)}
+.dock{position:absolute;left:10px;right:10px;bottom:calc(env(safe-area-inset-bottom,0px) + 10px);z-index:1000;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.dock>*{pointer-events:auto;box-shadow:var(--shadow)}
+.dock .row{display:flex;gap:8px;box-shadow:none}.dock .row>*{flex:1;box-shadow:var(--shadow)}
+.gps{background:var(--live);color:#032b25;font-size:16px}
+#toast{position:absolute;top:70px;left:50%;transform:translateX(-50%);z-index:2000;background:var(--ink);color:var(--paper);padding:10px 14px;border-radius:12px;max-width:92%;box-shadow:var(--shadow);display:none;text-align:center}
+#toast.err{background:var(--bad);color:#fff}
+.sheet{position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,.45);display:none;align-items:flex-end}
+.sheet.open{display:flex}
+.panel{background:var(--card);width:100%;max-height:88vh;overflow:auto;border-radius:20px 20px 0 0;padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 16px)}
+.panel h2{margin:0 0 10px;font-size:18px}
+label{display:block;font-weight:700;font-size:14px;margin:12px 0 4px}
+select,textarea,input[type=file]{width:100%;font:inherit;padding:10px;border-radius:10px;border:1.5px solid var(--line);background:var(--paper);color:var(--ink)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips label{margin:0;font-weight:400;border:1.5px solid var(--line);border-radius:999px;padding:6px 10px;display:flex;gap:6px;align-items:center;font-size:13px}
+.chips input:checked+span{font-weight:700}
+.actions{display:flex;gap:8px;margin-top:16px}.actions>*{flex:1}
+/* markers */
+.pin{position:relative;width:38px;height:38px}
+.pin .dot{position:absolute;inset:4px;border-radius:50%;background:var(--c);border:3px solid #fff;display:grid;place-items:center;font-size:16px;box-shadow:0 2px 6px rgba(0,0,0,.4)}
+.pin.live .dot{border-color:var(--live);box-shadow:0 0 0 2px #003d33,0 0 12px 3px var(--live)}
+.pin.live::before,.pin.live::after{content:"";position:absolute;inset:0;border-radius:50%;border:3px solid var(--live);animation:pulse 1.8s ease-out infinite}
+.pin.live::after{animation-delay:.9s}
+.pin .bolt{position:absolute;top:-6px;right:-6px;background:#fff200;color:#000;border-radius:50%;width:18px;height:18px;font-size:11px;display:grid;place-items:center;z-index:2;border:1px solid #000}
+@keyframes pulse{0%{transform:scale(.7);opacity:.9}100%{transform:scale(2.2);opacity:0}}
+@media(prefers-reduced-motion:reduce){.pin.live::before,.pin.live::after{animation:none;opacity:.5}}
+.tag{display:inline-block;font-weight:700;font-size:12px;padding:4px 8px;border-radius:8px;margin-bottom:6px}
+.tag.sheet-t{background:#e3ecea;color:#10302f}.tag.live-t{background:#003d33;color:var(--live);box-shadow:0 0 8px var(--live)}
+.leaflet-popup-content{font-family:inherit;font-size:14px;margin:12px;color:#10302f}
+.leaflet-popup-content img{max-width:100%;border-radius:8px;margin-top:6px}
+.pop b{display:block;font-size:15px;margin-bottom:2px}
+.me{width:16px;height:16px;border-radius:50%;background:#2a7fff;border:3px solid #fff;box-shadow:0 0 0 6px rgba(42,127,255,.3)}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Erişilebilirlik Haritası<small id="sub">X Caddesi · yükleniyor…</small></h1>
+    <button class="ghost" id="btnFilter" aria-haspopup="dialog">Filtre</button>
+  </header>
+  <div id="map" aria-label="Erişilebilirlik haritası"></div>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <div class="dock">
+    <button class="gps" id="btnReport">📍 Anlık Konumla Bildir / Ekle</button>
+    <div class="row">
+      <a class="btn primary" href="https://forms.gle/S3MXUJPeLtisXV6N6" target="_blank" rel="noopener">Google Form ile Bildir</a>
+      <button class="ghost" id="btnLocate">Konumum</button>
+    </div>
+  </div>
+</div>
+
+<div class="sheet" id="fSheet" role="dialog" aria-modal="true" aria-labelledby="fT"><div class="panel">
+  <h2 id="fT">Filtreler</h2>
+  <div id="filters"></div>
+  <div class="actions"><button class="ghost" id="fReset">Sıfırla</button><button class="primary" id="fClose">Haritayı göster</button></div>
+</div></div>
+
+<div class="sheet" id="rSheet" role="dialog" aria-modal="true" aria-labelledby="rT"><div class="panel">
+  <h2 id="rT">Canlı saha bildirimi</h2>
+  <div id="rInfo" style="font-size:13px;opacity:.8"></div>
+  <label for="rCat">Mekân kategorisi</label><select id="rCat"></select>
+  <label for="rType">Nokta türü</label><select id="rType"></select>
+  <label for="rDis">Engelsiz kategori</label><select id="rDis"></select>
+  <label for="rStat">Anlık durum</label><select id="rStat"></select>
+  <label for="rWho">Veri girişi yapan</label><select id="rWho"></select>
+  <label for="rNote">Erişilebilirlik notu</label><textarea id="rNote" rows="3" maxlength="400"></textarea>
+  <label for="rPhoto">Fotoğraf (isteğe bağlı)</label><input type="file" id="rPhoto" accept="image/*" capture="environment">
+  <div class="actions"><button class="ghost" id="rCancel">Vazgeç</button><button class="primary" id="rSave">Haritaya ekle</button></div>
+</div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script>
+/* ================= AYARLAR ================= */
+const CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vTg4kHb419CO0o5ecYNnI1lmYqkDU2qtZkb4wVAou3ptsNOPLVhBZydgKKh7dupSKLfeNFPzTXBo-Kw/pub?gid=112587318&single=true&output=csv";
+const STREET_NAME="X Caddesi";
+/* Geofence köşeleri [enlem, boylam]. DİKKAT: Aşağıdaki değerler YAKLAŞIK başlangıç değeridir.
+   Google Haritalar'da caddenin iki ucuna ve kenarlarına sağ tıklayıp koordinatları kopyalayarak güncelleyin. */
+const STREET_POLYGON=[[39.0340,43.3450],[39.0340,43.3720],[39.0200,43.3720],[39.0200,43.3450]];
+const MAP_CENTER=[39.0270,43.3590];
+const MAX_ACCURACY_M=150;      // GPS doğruluğu bundan kötüyse bildirime izin verilmez
+const DEV_BYPASS_GEOFENCE=false; // Sadece masa başı test için true yapın; yayında false kalmalı
+const REFRESH_MS=60000;
+/* ============== FORM SEÇENEKLERİ ============== */
+const CATS=["Kamusal Hizmet Binası","Toplu Taşıma Durağı / İstasyon","Açık Yaya Aksı / Cadde & Kaldırım","Eğitim / Kampüs Alanı","Sosyal Yaşam / Park & Rekreasyon","Ticari Mekân (Kafe, Market, Bankamatik)"];
+const TYPES=[["Rampa / Eğilimli Geçiş","♿"],["Engelli Otoparkı","🅿️"],["Asansör / Platform Lift","🛗"],["Hissedilebilir Sarı Kılavuz Yol","🦯"],["Sessiz / Düşük Uyaranlı Alan (Otizm)","🤫"],["Erişilebilir Tuvalet","🚻"],["Sesli Trafik Işığı / Yaya Geçidi Sinyali","🚦"],["Braille / QR Menü & Bilgi Panosu","⠃"],["Görsel Acil Durum Flaşörü / Alarm","🚨"],["İşaret Dili Destekli Danışma / Personel","🤟"],["Geçici / Kalıcı Engel","🚧"],["Erişilebilirlik Elemanı Yok","⛔"]];
+const DIS=["Görme","Fiziksel","İşitsel","Otizm / Nöroçeşitlilik","Bilişsel / Zihinsel","Çoklu Engellilik","Diğer"];
+const STAT=[["Aktif / Erişilebilir","#1f9d55"],["Kısmen Erişilebilir / Destekli","#e8a317"],["Arızalı / Kullanılamaz","#d64545"],["İşgal Edilmiş / Engellenmiş","#7a4fd6"],["Doğrulama Bekliyor","#6b7b80"]];
+const WHO=["Anonim Özel Gereksinimli Birey","Anonim Birey"];
+const FIELDS=[["cat","Mekân kategorisi",CATS],["type","Nokta türü",TYPES.map(t=>t[0])],["dis","Engelsiz kategori",DIS],["stat","Durum",STAT.map(s=>s[0])],["src","Veri kaynağı",["E-Tablo (doğrulanmış)","Canlı saha"]]];
+
+/* ============== YARDIMCILAR ============== */
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const norm=s=>String(s||"").toLocaleLowerCase("tr").replace(/ı/g,"i").replace(/[^a-z0-9ğüşöç]/g,"");
+const match=(v,list)=>{const n=norm(v);if(!n)return "";const hit=list.find(x=>norm(x)===n)||list.find(x=>n.includes(norm(x))||norm(x).includes(n));return hit||String(v).trim()};
+const emojiOf=t=>(TYPES.find(x=>x[0]===t)||[0,"📌"])[1];
+const colorOf=s=>(STAT.find(x=>x[0]===s)||[0,"#6b7b80"])[1];
+let toastT;function toast(m,err){const t=$("toast");t.textContent=m;t.className=err?"err":"";t.style.display="block";clearTimeout(toastT);toastT=setTimeout(()=>t.style.display="none",err?6000:3500)}
+function inPoly(lat,lon,poly){let r=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const[a,b]=poly[i],[c,d]=poly[j];if((b>lon)!==(d>lon)&&lat<(c-a)*(lon-b)/(d-b)+a)r=!r}return r}
+
+/* ============== HARİTA ============== */
+const map=L.map("map",{zoomControl:false}).setView(MAP_CENTER,[39.02312747552978, 43.37262369811207]);
+L.control.zoom({position:"topright"}).addTo(map);
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"&copy; OpenStreetMap katkıda bulunanlar"}).addTo(map);
+L.polygon(STREET_POLYGON=[[39.01811291040574, 43.38471298511454] , [39.01826295350476, 43.38477735812662] , [39.02793669088744, 43.361251132010175] , [39.02807004401495, 43.36144425104641],{color:"#00e5c0",weight:2,dashArray:"6 6",fillOpacity:.04,interactive:false}).addTo(map);
+const layer=L.layerGroup().addTo(map);
+let sheetRecs=[],liveRecs=[];
+try{liveRecs=JSON.parse(localStorage.getItem("liveRecs")||"[]")}catch(e){}
+
+/* ============== CSV ============== */
+function parseCoord(txt){
+  if(!txt)return null;const s=String(txt);
+  let m=s.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/)||s.match(/[?&](?:q|ll|query)=(-?\d+\.\d+)(?:,|%2C)(-?\d+\.\d+)/);
+  if(!m)m=s.replace(/(\d),(\d)/g,"$1.$2").match(/(-?\d{1,3}\.\d+)\s*[,;\s]\s*(-?\d{1,3}\.\d+)/);
+  if(!m)return null;let a=+m[1],b=+m[2];
+  if(a>60&&b<60){[a,b]=[b,a]} // Türkiye için enlem ~36-42, boylam ~26-45
+  return(isNaN(a)||isNaN(b))?null:[a,b]}
+function pick(row,keys){for(const h of Object.keys(row)){const n=norm(h);if(keys.some(k=>n.includes(k)))return row[h]}return ""}
+function rowToRec(row,i){
+  let ll=null;
+  const lat=pick(row,["enlem","latitude"]),lon=pick(row,["boylam","longitude"]);
+  if(lat&&lon)ll=parseCoord(lat+","+lon);
+  if(!ll)for(const h of Object.keys(row)){const n=norm(h);if(n.includes("konum")||n.includes("gps")||n.includes("koordinat")||n.includes("harita")){ll=parseCoord(row[h]);if(ll)break}}
+  if(!ll)return null;
+  return{id:"s"+i,src:"sheet",ll,cat:match(pick(row,["mekankategori","mekan"]),CATS),type:match(pick(row,["noktaturu","nokta"]),TYPES.map(t=>t[0])),
+    dis:match(pick(row,["engelsiz","engelkategori","engelturu"]),DIS),stat:match(pick(row,["anlikbildirim","durum"]),STAT.map(s=>s[0])),
+    note:pick(row,["not","aciklama"]),photo:pick(row,["foto"]),who:pick(row,["veriGirisi".toLowerCase(),"veri"]),time:pick(row,["zaman","tarih"])}}
+async function loadSheet(){
+  try{
+    const res=await fetch(CSV_URL+"&_="+Date.now(),{cache:"no-store"});
+    if(!res.ok)throw new Error(res.status);
+    const text=await res.text();
+    const parsed=Papa.parse(text,{header:true,skipEmptyLines:true});
+    const rows=parsed.data;
+    sheetRecs=rows.map(rowToRec).filter(Boolean);
+    const skipped=rows.length-sheetRecs.length;
+    $("sub").textContent=STREET_NAME+" · "+sheetRecs.length+" doğrulanmış kayıt"+(skipped?" ("+skipped+" satırda konum okunamadı)":"");
+  }catch(e){
+    $("sub").textContent=STREET_NAME+" · E-Tablo okunamadı";
+    toast("E-Tablo verisi alınamadı. İnternet bağlantısını ve tablonun 'Web'de yayınla' ayarını kontrol edin.",true)}
+  render()}
+
+/* ============== FİLTRE + ÇİZİM ============== */
+const filt={};FIELDS.forEach(f=>filt[f[0]]=new Set());
+function buildFilters(){
+  $("filters").innerHTML=FIELDS.map(([k,t,opts])=>`<label>${t}</label><div class="chips">${opts.map(o=>`<label><input type="checkbox" data-k="${k}" value="${esc(o)}"><span>${esc(o)}</span></label>`).join("")}</div>`).join("")}
+$("filters").addEventListener("change",e=>{const c=e.target,s=filt[c.dataset.k];c.checked?s.add(c.value):s.delete(c.value);render()});
+$("fReset").onclick=()=>{FIELDS.forEach(f=>filt[f[0]].clear());document.querySelectorAll("#filters input").forEach(i=>i.checked=false);render()};
+$("btnFilter").onclick=()=>$("fSheet").classList.add("open");$("fClose").onclick=()=>$("fSheet").classList.remove("open");
+const passes=r=>FIELDS.every(([k])=>{const s=filt[k];if(!s.size)return true;const v=k==="src"?(r.src==="live"?"Canlı saha":"E-Tablo (doğrulanmış)"):r[k];return s.has(v)});
+
+function icon(r){const live=r.src==="live";
+  return L.divIcon({className:"",iconSize:[38,38],iconAnchor:[19,19],popupAnchor:[0,-18],
+    html:`<div class="pin ${live?"live":""}" style="--c:${colorOf(r.stat)}">${live?'<span class="bolt">⚡</span>':""}<div class="dot">${emojiOf(r.type)}</div></div>`})}
+function popup(r){
+  const tag=r.src==="live"?`<span class="tag live-t">⚡ Canlı Saha Bildirimi - ${esc(STREET_NAME.replace(" Caddesi",""))} Caddesi</span>`:`<span class="tag sheet-t">📋 E-Tablo Doğrulanmış Kayıt</span>`;
+  let photo="";if(r.photo){photo=/^data:image|\.(jpg|jpeg|png|webp)(\?|$)/i.test(r.photo)?`<img alt="Saha fotoğrafı" src="${esc(r.photo)}">`:`<br><a href="${esc(r.photo)}" target="_blank" rel="noopener">Fotoğrafı aç</a>`}
+  const line=(l,v)=>v?`<div><b style="display:inline">${l}:</b> ${esc(v)}</div>`:"";
+  return`<div class="pop">${tag}<b>${esc(r.type||"Erişilebilirlik noktası")}</b>${line("Mekân",r.cat)}${line("Engelsiz kategori",r.dis)}${line("Durum",r.stat)}${line("Not",r.note)}${line("Bildiren",r.who)}${line("Zaman",r.time)}${photo}</div>`}
+function render(){
+  layer.clearLayers();
+  [...sheetRecs,...liveRecs].filter(passes).forEach(r=>L.marker(r.ll,{icon:icon(r),keyboard:true,title:r.type||""}).bindPopup(popup(r),{maxWidth:260}).addTo(layer))}
+
+/* ============== KONUM + GEOFENCE ============== */
+let meMarker;
+function getPos(){return new Promise((ok,no)=>{if(!navigator.geolocation)return no({code:0});navigator.geolocation.getCurrentPosition(ok,no,{enableHighAccuracy:true,timeout:15000,maximumAge:0})})}
+function gpsError(e){const m={0:"Bu tarayıcı konumu desteklemiyor.",1:"Konum izni reddedildi. Tarayıcı ayarlarından izin verin (sayfa HTTPS ile açılmalıdır).",2:"Konum belirlenemedi. Açık alanda tekrar deneyin.",3:"Konum zaman aşımına uğradı. Tekrar deneyin."};toast(m[e.code]||m[2],true)}
+$("btnLocate").onclick=async()=>{try{const p=await getPos();const ll=[p.coords.latitude,p.coords.longitude];if(meMarker)meMarker.remove();meMarker=L.marker(ll,{icon:L.divIcon({className:"",html:'<div class="me"></div>',iconSize:[16,16]})}).addTo(map);map.setView(ll,17)}catch(e){gpsError(e)}};
+
+let pending=null;
+$("btnReport").onclick=async()=>{
+  const b=$("btnReport");b.disabled=true;b.textContent="Konum alınıyor…";
+  try{
+    const p=await getPos();const lat=p.coords.latitude,lon=p.coords.longitude,acc=p.coords.accuracy;
+    if(!DEV_BYPASS_GEOFENCE){
+      if(!inPoly(lat,lon,STREET_POLYGON)){toast("Anlık bildirim yapabilmek için "+STREET_NAME+" sahasında olmalısınız.",true);return}
+      if(acc>MAX_ACCURACY_M){toast("GPS doğruluğu yetersiz (±"+Math.round(acc)+" m). Açık alanda bekleyip tekrar deneyin.",true);return}}
+    pending={ll:[lat,lon],acc};
+    $("rInfo").textContent="Konumunuz doğrulandı (±"+Math.round(acc)+" m). Bildirim bu konuma işlenecek.";
+    $("rSheet").classList.add("open");
+  }catch(e){gpsError(e)}finally{b.disabled=false;b.textContent="📍 Anlık Konumla Bildir / Ekle"}};
+$("rCancel").onclick=()=>$("rSheet").classList.remove("open");
+function fill(id,arr){$(id).innerHTML=arr.map(o=>`<option>${esc(o)}</option>`).join("")}
+fill("rCat",CATS);fill("rType",TYPES.map(t=>t[0]));fill("rDis",DIS);fill("rStat",STAT.map(s=>s[0]));fill("rWho",WHO);
+
+function shrink(file){return new Promise(res=>{if(!file)return res("");const fr=new FileReader();fr.onload=()=>{const im=new Image();im.onload=()=>{const s=Math.min(1,640/Math.max(im.width,im.height)),c=document.createElement("canvas");c.width=im.width*s;c.height=im.height*s;c.getContext("2d").drawImage(im,0,0,c.width,c.height);res(c.toDataURL("image/jpeg",.65))};im.onerror=()=>res("");im.src=fr.result};fr.onerror=()=>res("");fr.readAsDataURL(file)})}
+$("rSave").onclick=async()=>{
+  if(!pending)return;
+  const rec={id:"l"+Date.now(),src:"live",ll:pending.ll,cat:$("rCat").value,type:$("rType").value,dis:$("rDis").value,stat:$("rStat").value,who:$("rWho").value,note:$("rNote").value.trim(),photo:await shrink($("rPhoto").files[0]),time:new Date().toLocaleString("tr-TR")};
+  liveRecs.push(rec);
+  try{localStorage.setItem("liveRecs",JSON.stringify(liveRecs))}catch(e){toast("Kayıt eklendi ancak cihaza kaydedilemedi (depolama dolu).",true)}
+  $("rSheet").classList.remove("open");$("rNote").value="";$("rPhoto").value="";
+  render();map.setView(rec.ll,18);toast("Canlı saha bildirimi haritaya eklendi.");pending=null};
+document.querySelectorAll(".sheet").forEach(s=>s.addEventListener("click",e=>{if(e.target===s)s.classList.remove("open")}));
+document.addEventListener("keydown",e=>{if(e.key==="Escape")document.querySelectorAll(".sheet.open").forEach(s=>s.classList.remove("open"))});
+
+buildFilters();render();loadSheet();setInterval(loadSheet,REFRESH_MS);
+</script>
+</body>
+</html>
