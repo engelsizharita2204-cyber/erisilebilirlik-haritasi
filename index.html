@@ -92,6 +92,19 @@ select,textarea,input[type=file]{width:100%;font:inherit;padding:10px;border-rad
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script>
+/* Yedek kaynak 1: jsDelivr */
+if(typeof L==="undefined"){document.write('<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"><script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"><\/script>')}
+if(typeof Papa==="undefined"){document.write('<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"><\/script>')}
+</script>
+<script>
+/* Yedek kaynak 2: unpkg */
+if(typeof L==="undefined"){document.write('<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>')}
+if(typeof Papa==="undefined"){document.write('<script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"><\/script>')}
+</script>
+<script>
+if(typeof L==="undefined"||typeof Papa==="undefined"){var s=document.getElementById("sub");if(s)s.textContent="Harita kütüphanesi yüklenemedi. İnternet bağlantısını veya ağ engelini kontrol edin."}
+</script>
+<script>
 /* ================= AYARLAR ================= */
 const CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vTg4kHb419CO0o5ecYNnI1lmYqkDU2qtZkb4wVAou3ptsNOPLVhBZydgKKh7dupSKLfeNFPzTXBo-Kw/pub?gid=112587318&single=true&output=csv";
 const STREET_NAME="X Caddesi";
@@ -121,10 +134,14 @@ let toastT;function toast(m,err){const t=$("toast");t.textContent=m;t.className=
 function inPoly(lat,lon,poly){let r=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const[a,b]=poly[i],[c,d]=poly[j];if((b>lon)!==(d>lon)&&lat<(c-a)*(lon-b)/(d-b)+a)r=!r}return r}
 
 /* ============== HARİTA ============== */
-const map=L.map("map",{zoomControl:false}).setView(MAP_CENTER,[39.02312747552978, 43.37262369811207]);
+const map=L.map("map",{zoomControl:false}).setView(MAP_CENTER,15);
 L.control.zoom({position:"topright"}).addTo(map);
 L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"&copy; OpenStreetMap katkıda bulunanlar"}).addTo(map);
-L.polygon(STREET_POLYGON=[[39.01811291040574, 43.38471298511454] , [39.01826295350476, 43.38477735812662] , [39.02793669088744, 43.361251132010175] , [39.02807004401495, 43.36144425104641],{color:"#00e5c0",weight:2,dashArray:"6 6",fillOpacity:.04,interactive:false}).addTo(map);
+L.polygon(STREET_POLYGON,{color:"#00b894",weight:3,dashArray:"8 6",fillColor:"#00e5c0",fillOpacity:.12,interactive:false}).bindTooltip(STREET_NAME+" sınırı",{permanent:true,direction:"center"}).addTo(map);
+/* Ayar modu: sayfa adresinin sonuna #ayar ekleyip haritaya dokunarak koordinat alın */
+if(location.hash==="#ayar"){
+  map.on("click",e=>{const t=e.latlng.lat.toFixed(5)+", "+e.latlng.lng.toFixed(5);L.popup().setLatLng(e.latlng).setContent("<b>"+t+"</b>").openOn(map)});
+  setTimeout(()=>toast("Ayar modu: haritaya dokunarak koordinat alın"),500)}
 const layer=L.layerGroup().addTo(map);
 let sheetRecs=[],liveRecs=[];
 try{liveRecs=JSON.parse(localStorage.getItem("liveRecs")||"[]")}catch(e){}
